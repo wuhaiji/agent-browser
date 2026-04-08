@@ -46,6 +46,17 @@ agent-browser open https://example.com && agent-browser screenshot
 
 **When to chain:** Use `&&` when you don't need to read the output of an intermediate command before proceeding (e.g., open + wait + screenshot). Run commands separately when you need to parse the output first (e.g., snapshot to discover refs, then interact using those refs).
 
+## Launch Arg Overrides
+
+When launching a local Chrome instance, `--args` can override built-in default flags by key.
+
+```bash
+# Override built-in defaults with same flag keys
+agent-browser --args "--disable-sync=false,--password-store=gnome" open https://example.com
+```
+
+Matching uses the flag key before `=`. For example, `--disable-sync` and `--disable-sync=false` are treated as the same key.
+
 ## Handling Authentication
 
 When automating a site that requires login, choose the approach that fits:

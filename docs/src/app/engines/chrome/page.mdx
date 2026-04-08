@@ -102,3 +102,6 @@ agent-browser --args "--no-sandbox" open example.com
 ```
 
 agent-browser automatically adds `--no-sandbox` when it detects a container environment (Docker, Podman, running as root).
+
+When `--args` includes a flag with the same key as a built-in default, your value wins for that key.
+For example, `--disable-sync=false` overrides the default `--disable-sync`.

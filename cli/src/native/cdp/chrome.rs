@@ -230,7 +230,7 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
         args.push(format!("--window-size={},{}", w, h));
     }
 
-    args.extend(options.args.iter().cloned());
+    merge_user_launch_args(&mut args, &options.args);
 
     if should_disable_sandbox(&args) {
         args.push("--no-sandbox".to_string());
@@ -245,6 +245,46 @@ fn build_chrome_args(options: &LaunchOptions) -> Result<ChromeArgs, String> {
         user_data_dir,
         temp_user_data_dir,
     })
+}
+
+/// Merge user-provided launch args into defaults.
+///
+/// If a user arg has the same flag key as a default arg, the user arg replaces
+/// the default. Keys are compared by the token before `=` (e.g.,
+/// `--disable-sync` and `--disable-sync=false` share the same key).
+///
+/// Non-flag args are appended unchanged.
+fn merge_user_launch_args(default_args: &mut Vec<String>, user_args: &[String]) {
+    use std::collections::HashMap;
+
+    let mut key_to_index: HashMap<String, usize> = HashMap::new();
+    for (index, arg) in default_args.iter().enumerate() {
+        if let Some(key) = chrome_arg_key(arg) {
+            key_to_index.insert(key.to_string(), index);
+        }
+    }
+
+    for arg in user_args {
+        if let Some(key) = chrome_arg_key(arg) {
+            if let Some(index) = key_to_index.get(key).copied() {
+                default_args[index] = arg.clone();
+                continue;
+            }
+        }
+
+        default_args.push(arg.clone());
+        if let Some(key) = chrome_arg_key(arg) {
+            key_to_index.insert(key.to_string(), default_args.len() - 1);
+        }
+    }
+}
+
+fn chrome_arg_key(arg: &str) -> Option<&str> {
+    let stripped = arg.strip_prefix("--")?;
+    if stripped.is_empty() {
+        return None;
+    }
+    Some(stripped.split_once('=').map(|(k, _)| k).unwrap_or(stripped))
 }
 
 pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
@@ -1825,5 +1865,52 @@ mod tests {
             result.args.iter().any(|a| a == "--password-store=basic"),
             "profile path should keep keychain flags"
         );
+    }
+
+    #[test]
+    fn test_build_args_user_args_override_matching_defaults() {
+        let opts = LaunchOptions {
+            args: vec![
+                "--disable-sync=false".to_string(),
+                "--password-store=gnome".to_string(),
+                "--remote-debugging-port=9222".to_string(),
+            ],
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts).unwrap();
+
+        assert!(result.args.iter().any(|a| a == "--disable-sync=false"));
+        assert!(!result.args.iter().any(|a| a == "--disable-sync"));
+
+        assert!(result.args.iter().any(|a| a == "--password-store=gnome"));
+        assert!(!result.args.iter().any(|a| a == "--password-store=basic"));
+
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--remote-debugging-port=9222"));
+        assert!(!result.args.iter().any(|a| a == "--remote-debugging-port=0"));
+
+        if let Some(ref dir) = result.temp_user_data_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn test_build_args_user_args_without_default_are_appended() {
+        let opts = LaunchOptions {
+            args: vec!["--disable-blink-features=AutomationControlled".to_string()],
+            ..Default::default()
+        };
+        let result = build_chrome_args(&opts).unwrap();
+
+        assert!(result
+            .args
+            .iter()
+            .any(|a| a == "--disable-blink-features=AutomationControlled"));
+
+        if let Some(ref dir) = result.temp_user_data_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }

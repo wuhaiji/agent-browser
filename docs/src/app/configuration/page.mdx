@@ -112,6 +112,9 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
 }
 ```
 
+`args` values with the same flag key override built-in defaults for that key.  
+Example: `--disable-sync=false` overrides the default `--disable-sync`.
+
 ### iOS Testing
 
 ```json
