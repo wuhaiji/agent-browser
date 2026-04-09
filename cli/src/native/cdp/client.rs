@@ -252,6 +252,31 @@ impl CdpClient {
         Ok(response.result.unwrap_or(Value::Null))
     }
 
+    pub async fn send_command_no_wait(
+        &self,
+        method: &str,
+        params: Option<Value>,
+        session_id: Option<&str>,
+    ) -> Result<(), String> {
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+
+        let cmd = CdpCommand {
+            id,
+            method: method.to_string(),
+            params,
+            session_id: session_id.filter(|s| !s.is_empty()).map(|s| s.to_string()),
+        };
+
+        let json = serde_json::to_string(&cmd)
+            .map_err(|e| format!("Failed to serialize CDP command: {}", e))?;
+
+        let mut ws_tx = self.ws_tx.lock().await;
+        ws_tx
+            .send(Message::Text(json))
+            .await
+            .map_err(|e| format!("Failed to send CDP command: {}", e))
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<CdpEvent> {
         self.event_tx.subscribe()
     }
@@ -292,6 +317,18 @@ impl CdpClient {
         session_id: Option<&str>,
     ) -> Result<Value, String> {
         self.send_command(method, None, session_id).await
+    }
+
+    pub async fn send_command_typed_no_wait<P: serde::Serialize>(
+        &self,
+        method: &str,
+        params: &P,
+        session_id: Option<&str>,
+    ) -> Result<(), String> {
+        let params_value = serde_json::to_value(params)
+            .map_err(|e| format!("Failed to serialize params: {}", e))?;
+        self.send_command_no_wait(method, Some(params_value), session_id)
+            .await
     }
 
     /// Send raw JSON through the WebSocket without tracking a response.

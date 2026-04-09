@@ -936,9 +936,9 @@ async fn dispatch_click(
         )
         .await?;
 
-    // Release
+    // confirm/prompt 会阻塞 release 的 CDP 响应；这里发送后立即返回，避免整条 click 卡住 30 秒。
     client
-        .send_command_typed::<_, Value>(
+        .send_command_typed_no_wait(
             "Input.dispatchMouseEvent",
             &DispatchMouseEventParams {
                 event_type: "mouseReleased".to_string(),
